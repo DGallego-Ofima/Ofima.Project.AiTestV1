@@ -1,0 +1,218 @@
+&& frmLogin_new.prg - Version con inicializacion y boton
+
+public goFrmLogin
+if vartype(goFrmLogin) <> "O"
+	goFrmLogin = createobject("frmLogin")
+endif
+
+goFrmLogin.show()
+read events
+
+define class frmLogin as form
+	caption = "Inicio de sesion"
+	width = 360
+	height = 200
+	autocenter = .t.
+	showwindow = 0
+	name = "frmLogin"
+	oAuthService = .NULL.
+	cApiBaseUrl = "https://localhost:59500"
+	cToken = ""
+	lAuthenticating = .F.
+
+	add object lblUsername as label with ;
+		caption = "Usuario:", ;
+		left = 40, ;
+		top = 45, ;
+		autosize = .t.
+
+	add object txtUsername as textbox with ;
+		left = 120, ;
+		top = 40, ;
+		width = 200, ;
+		height = 24, ;
+		name = "txtUsername"
+
+	add object lblPassword as label with ;
+		caption = "Contrasena:", ;
+		left = 40, ;
+		top = 95, ;
+		autosize = .t.
+
+	add object txtPassword as textbox with ;
+		left = 120, ;
+		top = 90, ;
+		width = 200, ;
+		height = 24, ;
+		passwordchar = "*", ;
+		name = "txtPassword"
+
+	add object cmdContinue as commandbutton with ;
+		left = 220, ;
+		top = 140, ;
+		width = 100, ;
+		height = 28, ;
+		caption = "Continuar", ;
+		default = .t., ;
+		name = "cmdContinue"
+
+	procedure init()
+		dodefault()
+		this.EnsureServices()
+		this.txtUsername.value = ""
+		this.txtPassword.value = ""
+	endproc
+
+	procedure cmdContinue.click
+		if thisform.lAuthenticating
+			return
+		endif
+		thisform.lAuthenticating = .t.
+		local lcUsername, lcPassword, loResponse, lcMessage
+		lcUsername = alltrim(thisform.txtUsername.value)
+		lcPassword = alltrim(thisform.txtPassword.value)
+		if empty(lcUsername) or empty(lcPassword)
+			messagebox("Debe ingresar usuario y contrasena.", 48, "Validacion")
+			thisform.lAuthenticating = .f.
+			return
+		endif
+		thisform.EnsureServices()
+		loResponse = thisform.oAuthService.Login(lcUsername, lcPassword)
+		if vartype(loResponse) = "O" and loResponse.Success
+			if thisform.ProcessLoginResponse(loResponse.Body)
+				messagebox("Autenticacion exitosa.", 64, "Sesion")
+				thisform.Hide()
+				clear events
+			else
+				messagebox("No se pudo interpretar la respuesta del servidor.", 16, "Error")
+			endif
+		else
+			lcMessage = thisform.BuildErrorMessage(iif(vartype(loResponse) = "O", loResponse.Body, ""), thisform.oAuthService.GetLastError(), iif(vartype(loResponse) = "O", loResponse.Status, 0))
+			messagebox(lcMessage, 16, "Error")
+		endif
+		thisform.lAuthenticating = .f.
+	endproc
+
+	procedure EnsureServices
+		local lcDir
+		if vartype(this.oAuthService) = "O"
+			return
+		endif
+		lcDir = addbs(justpath(sys(16, 0)))
+		if empty(lcDir)
+			lcDir = addbs(curdir())
+		endif
+		set procedure to (lcDir + "ApiServiceLoader.prg") additive
+		do LoadApiServices with lcDir
+		this.oAuthService = createobject("AuthApiService")
+		this.oAuthService.SetBaseUrl(this.cApiBaseUrl)
+	endproc
+
+	procedure ProcessLoginResponse(tcBody)
+		local lcToken, lcUsername
+		lcToken = this.ExtractJsonString(tcBody, "token")
+		if empty(lcToken)
+			return .f.
+		endif
+		this.cToken = lcToken
+		this.oAuthService.SetToken(lcToken)
+		lcUsername = this.ExtractJsonString(tcBody, "username")
+		if type("_SCREEN.cAuthToken") = "U"
+			_SCREEN.AddProperty("cAuthToken", "")
+		endif
+		_SCREEN.cAuthToken = lcToken
+		if type("_SCREEN.cApiBaseUrl") = "U"
+			_SCREEN.AddProperty("cApiBaseUrl", "")
+		endif
+		_SCREEN.cApiBaseUrl = this.cApiBaseUrl
+		if type("_SCREEN.cAuthUser") = "U"
+			_SCREEN.AddProperty("cAuthUser", "")
+		endif
+		_SCREEN.cAuthUser = lcUsername
+		return .t.
+	endproc
+
+	procedure BuildErrorMessage(tcBody, tcFallback, tnStatus)
+		local lcMessage
+		lcMessage = this.ExtractJsonString(tcBody, "message")
+		if empty(lcMessage)
+			lcMessage = this.ExtractJsonString(tcBody, "error")
+		endif
+		if empty(lcMessage)
+			lcMessage = this.ExtractJsonString(tcBody, "errors")
+		endif
+		if empty(lcMessage) and not empty(tcFallback)
+			lcMessage = tcFallback
+		endif
+		if empty(lcMessage)
+			if tnStatus > 0
+				lcMessage = "Error HTTP " + ltrim(transform(tnStatus))
+			else
+				lcMessage = "No fue posible conectarse al servidor."
+			endif
+		endif
+		return lcMessage
+	endproc
+
+	procedure ExtractJsonString(tcJson, tcKey)
+		local lcSearch, lnPosKey, lcBuffer, lnPosColon, lcTrimmed, lcFirstChar, lnEnd, lcResult
+		if vartype(tcJson) <> "C" or empty(tcJson) or vartype(tcKey) <> "C" or empty(tcKey)
+			return ""
+		endif
+		lcSearch = '"' + tcKey + '"'
+		lnPosKey = at(lcSearch, tcJson)
+		if lnPosKey <= 0
+			return ""
+		endif
+		lcBuffer = substr(tcJson, lnPosKey + len(lcSearch))
+		lnPosColon = at(":", lcBuffer)
+		if lnPosColon <= 0
+			return ""
+		endif
+		lcTrimmed = alltrim(substr(lcBuffer, lnPosColon + 1))
+		if empty(lcTrimmed)
+			return ""
+		endif
+		lcFirstChar = left(lcTrimmed, 1)
+		if lcFirstChar = '"'
+			lcTrimmed = substr(lcTrimmed, 2)
+			lnEnd = 0
+			do while .t.
+				lnEnd = at('"', lcTrimmed)
+				if lnEnd = 0
+					exit
+				endif
+				if lnEnd = 1 or substr(lcTrimmed, lnEnd - 1, 1) <> '\'
+					exit
+				endif
+				lcTrimmed = substr(lcTrimmed, 1, lnEnd - 1) + substr(lcTrimmed, lnEnd + 1)
+			enddo
+			if lnEnd = 0
+				return ""
+			endif
+			lcResult = substr(lcTrimmed, 1, lnEnd - 1)
+			lcResult = strtran(lcResult, '\\"', '"')
+			lcResult = strtran(lcResult, '\\\\', '\\')
+			return lcResult
+		else
+			lnEnd = at(",", lcTrimmed)
+			if lnEnd = 0
+				lnEnd = at("}", lcTrimmed)
+			endif
+			if lnEnd = 0
+				lnEnd = at("]", lcTrimmed)
+			endif
+			if lnEnd = 0
+				lnEnd = len(lcTrimmed) + 1
+			endif
+			lcResult = alltrim(substr(lcTrimmed, 1, lnEnd - 1))
+			if upper(lcResult) = "NULL"
+				return ""
+			endif
+			if left(lcResult, 1) = '"' and right(lcResult, 1) = '"'
+				lcResult = substr(lcResult, 2, len(lcResult) - 2)
+			endif
+			return lcResult
+		endif
+	endproc
+enddefine

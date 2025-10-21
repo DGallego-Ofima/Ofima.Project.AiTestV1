@@ -142,9 +142,9 @@ BEGIN
         CONSTRAINT [PK_Orders] PRIMARY KEY CLUSTERED ([Id] ASC),
         CONSTRAINT [UQ_Orders_Number] UNIQUE NONCLUSTERED ([Number] ASC),
         CONSTRAINT [FK_Orders_Customers] FOREIGN KEY ([CustomerId]) 
-            REFERENCES [erp].[Customers]([Id]) ON DELETE RESTRICT,
+            REFERENCES [erp].[Customers]([Id]),
         CONSTRAINT [FK_Orders_CreatedBy] FOREIGN KEY ([CreatedBy]) 
-            REFERENCES [sec].[Users]([Id]) ON DELETE RESTRICT,
+            REFERENCES [sec].[Users]([Id]),
         CONSTRAINT [CK_Orders_Status] CHECK ([Status] IN (0, 1, 2)),
         CONSTRAINT [CK_Orders_SubTotal] CHECK ([SubTotal] >= 0),
         CONSTRAINT [CK_Orders_TaxAmount] CHECK ([TaxAmount] >= 0),
@@ -193,7 +193,7 @@ BEGIN
         CONSTRAINT [FK_OrderLines_Orders] FOREIGN KEY ([OrderId]) 
             REFERENCES [erp].[Orders]([Id]) ON DELETE CASCADE,
         CONSTRAINT [FK_OrderLines_Products] FOREIGN KEY ([ProductId]) 
-            REFERENCES [erp].[Products]([Id]) ON DELETE RESTRICT,
+            REFERENCES [erp].[Products]([Id]),
         CONSTRAINT [CK_OrderLines_Qty] CHECK ([Qty] > 0),
         CONSTRAINT [CK_OrderLines_UnitPrice] CHECK ([UnitPrice] >= 0),
         CONSTRAINT [UQ_OrderLines_OrderId_ProductId] UNIQUE NONCLUSTERED ([OrderId] ASC, [ProductId] ASC)
@@ -231,7 +231,7 @@ BEGIN
         -- Constraints
         CONSTRAINT [PK_AuditLog] PRIMARY KEY CLUSTERED ([Id] ASC),
         CONSTRAINT [FK_AuditLog_Users] FOREIGN KEY ([UserId]) 
-            REFERENCES [sec].[Users]([Id]) ON DELETE RESTRICT,
+            REFERENCES [sec].[Users]([Id]),
         CONSTRAINT [CK_AuditLog_Action] CHECK ([Action] IN (
             'CREATE', 'UPDATE', 'DELETE', 'CONFIRM', 'CANCEL', 'LOGIN', 'LOGOUT'
         ))
